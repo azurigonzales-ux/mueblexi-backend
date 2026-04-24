@@ -1,0 +1,173 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+from pymongo import MongoClient
+import cloudinary
+import cloudinary.uploader
+
+# --- CONFIGURACIÓN CLOUDINARY ---
+cloudinary.config( 
+  cloud_name = "dftittnxn", 
+  api_key = "163411321849394", 
+  api_secret = "C0qDZyEs-zZkfn8733vMaWdcrVg" 
+)
+
+app = Flask(__name__)
+CORS(app) 
+
+# --- CONEXIÓN A MONGO ATLAS ---
+client = MongoClient('mongodb+srv://admin_mueblexi:16JUAN18RAUL@cluster0.lqodd.mongodb.net/?appName=Cluster0')
+db = client['mueblexi_db']
+usuarios = db['usuarios']
+productos = db['productos'] 
+abonos = db['abonos'] 
+
+# --- 1. SEGURIDAD: LOGIN Y REGISTRO (RF-01, RF-02) ---
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        datos = request.get_json(force=True)
+        usuario_recibido = datos.get('username') 
+        password_recibida = datos.get('password')
+
+        usuario_encontrado = usuarios.find_one({"username": usuario_recibido})
+        
+        if not usuario_encontrado:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        if check_password_hash(usuario_encontrado['password'], password_recibida):
+            return jsonify({
+                "status": "ok", 
+                "rol": usuario_encontrado.get('rol', 'cliente'),
+                "username": usuario_encontrado.get('username')
+            }), 200
+        else:
+            return jsonify({"error": "Contraseña incorrecta"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    try:
+        datos = request.get_json(force=True)
+        nombre = datos.get('nombre') 
+        username = datos.get('username')
+        password = datos.get('password')
+        rol = datos.get('rol', 'cliente') 
+        
+        if usuarios.find_one({"username": username}):
+            return jsonify({"error": "El nombre de usuario ya existe"}), 400
+
+        password_encriptada = generate_password_hash(password)
+        usuarios.insert_one({
+            "nombre": nombre, 
+            "username": username,
+            "password": password_encriptada,
+            "rol": rol
+        })
+        return jsonify({"mensaje": "Cuenta de Mueblexi creada"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- 2. GESTIÓN DE PRODUCTOS (RF-06, RF-07) ---
+
+# ... (Mantén tus importaciones y configuración de Cloudinary igual)
+
+# --- 2. GESTIÓN DE PRODUCTOS (RF-06, RF-07) ---
+
+@app.route('/api/productos', methods=['POST'])
+def agregar_producto():
+    try:
+        # Detectamos los campos tal cual los mandas en tu HTML/TS
+        nombre = request.form.get('nombre')
+        # Buscamos 'precio' o 'precio_total' por si acaso
+        precio_raw = request.form.get('precio') or request.form.get('precio_total')
+        descripcion = request.form.get('descripcion') or request.form.get('Descripción')
+        categoria = request.form.get('categoria') or request.form.get('Categoría') or 'General'
+        username_cliente = request.form.get('username_cliente') or 'Sin asignar'
+
+        # Verificación de imagen (RF-07)
+        if 'imagen' not in request.files:
+            return jsonify({"error": "Falta la imagen del mueble"}), 400
+            
+        imagen_archivo = request.files['imagen']
+        
+        # Subida a Cloudinary
+        resultado_subida = cloudinary.uploader.upload(
+            imagen_archivo, 
+            resource_type="auto",
+            folder="muebles_proyecto"
+        )
+        
+        url_imagen = resultado_subida['secure_url']
+        
+        # GUARDADO CON LOS NOMBRES EXACTOS DE TU BASE DE DATOS
+        nuevo_producto = {
+            "nombre": nombre,
+            "precio_total": float(precio_raw) if precio_raw else 0.0,
+            "descripcion": descripcion,
+            "categoria": categoria,
+            "username_cliente": username_cliente,
+            "imagen": url_imagen,
+            "vendedor": "Admin_Mueblexi"
+        }
+        
+        # Insertamos en la colección 'productos' de tu base 'mueblexi_db'
+        db.productos.insert_one(nuevo_producto)
+        
+        return jsonify({
+            "status": "ok", 
+            "mensaje": "¡Mueble guardado en Atlas y foto en Cloudinary!",
+            "url": url_imagen
+        }), 201
+
+    except Exception as e:
+        print(f"Error detectado: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# ... (El resto de tus rutas login/register se quedan igual abajo)
+
+# --- 3. SISTEMA DE ABONOS Y SALDOS (RF-08, RF-09, RF-10) ---
+
+@app.route('/api/abonos', methods=['POST'])
+def registrar_abono():
+    try:
+        datos = request.get_json(force=True)
+        nuevo_abono = {
+            "username_cliente": datos.get('username_cliente'),
+            "nombre_producto": datos.get('nombre_producto'),
+            "monto": float(datos.get('monto', 0)),
+            "fecha": datos.get('fecha')
+        }
+        db.abonos.insert_one(nuevo_abono)
+        return jsonify({"status": "ok", "mensaje": "Abono guardado en Atlas"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/mis-compras/<username>', methods=['GET'])
+def obtener_compras_cliente(username):
+    compras = list(db.productos.find({"username_cliente": username}, {"_id": 0}))
+    return jsonify(compras), 200
+
+@app.route('/api/historial-pagos/<username>/<producto>', methods=['GET'])
+def obtener_historial(username, producto):
+    historial = list(db.abonos.find({
+        "username_cliente": username,
+        "nombre_producto": producto
+    }, {"_id": 0}))
+    return jsonify(historial), 200
+
+# RUTA PARA EL CATÁLOGO (RF-04)
+@app.route('/api/productos', methods=['GET'])
+def obtener_catalogo():
+    try:
+        lista = list(db.productos.find({}, {"_id": 0}))
+        return jsonify(lista), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == '__main__':
+    #  celular
+    app.run(host='0.0.0.0', port=5001, debug=True)
