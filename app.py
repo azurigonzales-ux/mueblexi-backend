@@ -16,15 +16,24 @@ cloudinary.config(
 app = Flask(__name__)
 CORS(app) 
 
-# --- CONEXIÓN A MONGO ATLAS ---
-# Se actualizó <db_password> por RAUL123 y se especificó la base de datos mueblexi_db
+# --- CONEXIÓN A MONGO ATLAS CON PRUEBA DE PING ---
 MONGO_URI = 'mongodb+srv://admin_mueblexi:RAUL123@cluster0.lqodd.mongodb.net/mueblexi_db?retryWrites=true&w=majority&appName=Cluster0'
 
-client = MongoClient(MONGO_URI)
-db = client['mueblexi_db']
-usuarios = db['usuarios']
-productos = db['productos'] 
-abonos = db['abonos'] 
+try:
+    # serverSelectionTimeoutMS=5000 hace que si no conecta en 5 seg, mande el error de inmediato
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    
+    # ESTA LÍNEA ES LA PRUEBA DE FUEGO
+    client.admin.command('ping') 
+    print(">>> [CONEXIÓN EXITOSA CON MUEBLEXI_DB] <<<")
+    
+    db = client['mueblexi_db']
+    usuarios = db['usuarios']
+    productos = db['productos'] 
+    abonos = db['abonos'] 
+    
+except Exception as e:
+    print(f">>> [ERROR CRÍTICO DE CONEXIÓN]: {str(e)} <<<")
 
 # --- 1. SEGURIDAD: LOGIN Y REGISTRO ---
 
@@ -158,6 +167,5 @@ def obtener_historial(username, producto):
 
 # --- ARRANQUE ---
 if __name__ == '__main__':
-    # Mantenemos el os.environ para que funcione en Render automáticamente
     port = int(os.environ.get("PORT", 5001))
     app.run(host='0.0.0.0', port=port, debug=True)
