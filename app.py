@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
 import cloudinary
 import cloudinary.uploader
+import os
 
 # --- CONFIGURACIÓN CLOUDINARY ---
 cloudinary.config( 
@@ -16,13 +17,16 @@ app = Flask(__name__)
 CORS(app) 
 
 # --- CONEXIÓN A MONGO ATLAS ---
-client = MongoClient('mongodb+srv://admin_mueblexi:16JUAN18RAUL@cluster0.lqodd.mongodb.net/?appName=Cluster0')
+# Usando EXACTAMENTE tu link, solo insertando la contraseña 16JUAN18RAUL
+MONGO_URI = 'mongodb+srv://admin_mueblexi:16JUAN18RAUL@cluster0.lqodd.mongodb.net/?appName=Cluster0'
+
+client = MongoClient(MONGO_URI)
 db = client['mueblexi_db']
 usuarios = db['usuarios']
 productos = db['productos'] 
 abonos = db['abonos'] 
 
-# --- 1. SEGURIDAD: LOGIN Y REGISTRO (RF-01, RF-02) ---
+# --- 1. SEGURIDAD: LOGIN Y REGISTRO ---
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -70,30 +74,22 @@ def register():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 2. GESTIÓN DE PRODUCTOS (RF-06, RF-07) ---
-
-# ... (Mantén tus importaciones y configuración de Cloudinary igual)
-
-# --- 2. GESTIÓN DE PRODUCTOS (RF-06, RF-07) ---
+# --- 2. GESTIÓN DE PRODUCTOS ---
 
 @app.route('/api/productos', methods=['POST'])
 def agregar_producto():
     try:
-        # Detectamos los campos tal cual los mandas en tu HTML/TS
         nombre = request.form.get('nombre')
-        # Buscamos 'precio' o 'precio_total' por si acaso
         precio_raw = request.form.get('precio') or request.form.get('precio_total')
-        descripcion = request.form.get('descripcion') or request.form.get('Descripción')
-        categoria = request.form.get('categoria') or request.form.get('Categoría') or 'General'
+        descripcion = request.form.get('descripcion')
+        categoria = request.form.get('categoria') or 'General'
         username_cliente = request.form.get('username_cliente') or 'Sin asignar'
 
-        # Verificación de imagen (RF-07)
         if 'imagen' not in request.files:
             return jsonify({"error": "Falta la imagen del mueble"}), 400
             
         imagen_archivo = request.files['imagen']
         
-        # Subida a Cloudinary
         resultado_subida = cloudinary.uploader.upload(
             imagen_archivo, 
             resource_type="auto",
@@ -102,7 +98,6 @@ def agregar_producto():
         
         url_imagen = resultado_subida['secure_url']
         
-        # GUARDADO CON LOS NOMBRES EXACTOS DE TU BASE DE DATOS
         nuevo_producto = {
             "nombre": nombre,
             "precio_total": float(precio_raw) if precio_raw else 0.0,
@@ -113,22 +108,25 @@ def agregar_producto():
             "vendedor": "Admin_Mueblexi"
         }
         
-        # Insertamos en la colección 'productos' de tu base 'mueblexi_db'
         db.productos.insert_one(nuevo_producto)
         
         return jsonify({
             "status": "ok", 
-            "mensaje": "¡Mueble guardado en Atlas y foto en Cloudinary!",
+            "mensaje": "¡Mueble guardado en Atlas!",
             "url": url_imagen
         }), 201
-
     except Exception as e:
-        print(f"Error detectado: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# ... (El resto de tus rutas login/register se quedan igual abajo)
+@app.route('/api/productos', methods=['GET'])
+def obtener_catalogo():
+    try:
+        lista = list(db.productos.find({}, {"_id": 0}))
+        return jsonify(lista), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# --- 3. SISTEMA DE ABONOS Y SALDOS (RF-08, RF-09, RF-10) ---
+# --- 3. SISTEMA DE ABONOS Y SALDOS ---
 
 @app.route('/api/abonos', methods=['POST'])
 def registrar_abono():
@@ -158,16 +156,8 @@ def obtener_historial(username, producto):
     }, {"_id": 0}))
     return jsonify(historial), 200
 
-# RUTA PARA EL CATÁLOGO (RF-04)
-@app.route('/api/productos', methods=['GET'])
-def obtener_catalogo():
-    try:
-        lista = list(db.productos.find({}, {"_id": 0}))
-        return jsonify(lista), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
+# --- ARRANQUE ---
 if __name__ == '__main__':
-    #  celular
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Mantenemos el os.environ para que funcione en Render automáticamente
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host='0.0.0.0', port=port, debug=True)
