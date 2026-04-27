@@ -17,8 +17,8 @@ app = Flask(__name__)
 CORS(app) 
 
 # --- CONEXIÓN A MONGO ATLAS ---
-# Usando EXACTAMENTE tu link, solo insertando la contraseña 16JUAN18RAUL
-MONGO_URI = 'mongodb+srv://admin_mueblexi:16JUAN18RAUL@cluster0.lqodd.mongodb.net/?appName=Cluster0'
+# Se actualizó <db_password> por RAUL123 y se especificó la base de datos mueblexi_db
+MONGO_URI = 'mongodb+srv://admin_mueblexi:RAUL123@cluster0.lqodd.mongodb.net/mueblexi_db?retryWrites=true&w=majority&appName=Cluster0'
 
 client = MongoClient(MONGO_URI)
 db = client['mueblexi_db']
