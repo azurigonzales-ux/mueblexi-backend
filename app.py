@@ -20,10 +20,7 @@ CORS(app)
 MONGO_URI = 'mongodb+srv://admin_mueblexi:RAUL123@cluster0.lqodd.mongodb.net/mueblexi_db?retryWrites=true&w=majority&appName=Cluster0'
 
 try:
-    # serverSelectionTimeoutMS=5000 hace que si no conecta en 5 seg, mande el error de inmediato
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    
-    # ESTA LÍNEA ES LA PRUEBA DE FUEGO
     client.admin.command('ping') 
     print(">>> [CONEXIÓN EXITOSA CON MUEBLEXI_DB] <<<")
     
@@ -43,7 +40,6 @@ def login():
         datos = request.get_json(force=True)
         usuario_recibido = datos.get('username') 
         password_recibida = datos.get('password')
-
         usuario_encontrado = usuarios.find_one({"username": usuario_recibido})
         
         if not usuario_encontrado:
@@ -83,7 +79,7 @@ def register():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 2. GESTIÓN DE PRODUCTOS ---
+# --- 2. GESTIÓN DE PRODUCTOS (POST, GET, PUT, DELETE) ---
 
 @app.route('/api/productos', methods=['POST'])
 def agregar_producto():
@@ -98,13 +94,11 @@ def agregar_producto():
             return jsonify({"error": "Falta la imagen del mueble"}), 400
             
         imagen_archivo = request.files['imagen']
-        
         resultado_subida = cloudinary.uploader.upload(
             imagen_archivo, 
             resource_type="auto",
             folder="muebles_proyecto"
         )
-        
         url_imagen = resultado_subida['secure_url']
         
         nuevo_producto = {
@@ -116,14 +110,8 @@ def agregar_producto():
             "imagen": url_imagen,
             "vendedor": "Admin_Mueblexi"
         }
-        
         db.productos.insert_one(nuevo_producto)
-        
-        return jsonify({
-            "status": "ok", 
-            "mensaje": "¡Mueble guardado en Atlas!",
-            "url": url_imagen
-        }), 201
+        return jsonify({"status": "ok", "mensaje": "¡Mueble guardado!", "url": url_imagen}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -132,6 +120,34 @@ def obtener_catalogo():
     try:
         lista = list(db.productos.find({}, {"_id": 0}))
         return jsonify(lista), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# NUEVA: Eliminar Producto
+@app.route('/api/productos/<nombre>', methods=['DELETE'])
+def eliminar_producto(nombre):
+    try:
+        resultado = db.productos.delete_one({"nombre": nombre})
+        if resultado.deleted_count > 0:
+            return jsonify({"status": "ok", "mensaje": "Producto eliminado"}), 200
+        return jsonify({"error": "No se encontró el producto"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# NUEVA: Editar Producto (Precio y Descripción)
+@app.route('/api/productos/<nombre>', methods=['PUT'])
+def editar_producto(nombre):
+    try:
+        datos = request.get_json(force=True)
+        nuevos_valores = {
+            "$set": {
+                "precio_total": float(datos.get('precio_total')),
+                "descripcion": datos.get('descripcion'),
+                "username_cliente": datos.get('username_cliente')
+            }
+        }
+        db.productos.update_one({"nombre": nombre}, nuevos_valores)
+        return jsonify({"status": "ok", "mensaje": "Producto actualizado"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -149,6 +165,20 @@ def registrar_abono():
         }
         db.abonos.insert_one(nuevo_abono)
         return jsonify({"status": "ok", "mensaje": "Abono guardado en Atlas"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# NUEVA: Eliminar Abono (Por cliente, producto y fecha para ser precisos)
+@app.route('/api/abonos/eliminar', methods=['POST'])
+def eliminar_abono():
+    try:
+        datos = request.get_json(force=True)
+        db.abonos.delete_one({
+            "username_cliente": datos.get('username_cliente'),
+            "nombre_producto": datos.get('nombre_producto'),
+            "fecha": datos.get('fecha')
+        })
+        return jsonify({"status": "ok", "mensaje": "Abono eliminado"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
