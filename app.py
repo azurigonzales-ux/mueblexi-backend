@@ -204,6 +204,34 @@ def obtener_clientes():
         return jsonify(lista_clientes), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+  @app.route('/api/productos/autorizar-compra', methods=['POST'])
+def autorizar_compra():
+    try:
+        datos = request.get_json(force=True)
+        vendedor_user = datos.get('username_vendedor')
+        vendedor_pass = datos.get('password_vendedor')
+        cliente_user = datos.get('username_cliente')
+        nombre_mueble = datos.get('nombre_producto')
+
+        # 1. Verificar que el que autoriza sea realmente un vendedor
+        vendedor_db = db.usuarios.find_one({"username": vendedor_user, "rol": "vendedor"})
+        
+        if not vendedor_db or not check_password_hash(vendedor_db['password'], vendedor_pass):
+            return jsonify({"error": "Credenciales de vendedor inválidas"}), 401
+
+        # 2. Asignar el producto al cliente
+        resultado = db.productos.update_one(
+            {"nombre": nombre_mueble},
+            {"$set": {"username_cliente": cliente_user}}
+        )
+
+        if resultado.modified_count > 0:
+            return jsonify({"status": "ok", "mensaje": "Compra autorizada y asignada"}), 200
+        else:
+            return jsonify({"error": "No se pudo asignar el producto"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- ARRANQUE ---
 if __name__ == '__main__':
