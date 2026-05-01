@@ -194,6 +194,16 @@ def obtener_historial(username, producto):
         "nombre_producto": producto
     }, {"_id": 0}))
     return jsonify(historial), 200
+  # NUEVA: Obtener lista de usuarios que son clientes
+@app.route('/api/usuarios/clientes', methods=['GET'])
+def obtener_clientes():
+    try:
+        # Buscamos en la colección usuarios a todos los que tengan rol 'cliente'
+        # Solo traemos nombre y username, ocultando el password por seguridad
+        lista_clientes = list(db.usuarios.find({"rol": "cliente"}, {"_id": 0, "password": 0}))
+        return jsonify(lista_clientes), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- ARRANQUE ---
 if __name__ == '__main__':
