@@ -8,15 +8,16 @@ import os
 
 # --- CONFIGURACIÓN CLOUDINARY ---
 cloudinary.config( 
-  cloud_name = "dftittnxn", 
-  api_key = "163411321849394", 
-  api_secret = "C0qDZyEs-zZkfn8733vMaWdcrVg" 
+    cloud_name = "dftittnxn", 
+    api_key = "163411321849394", 
+    api_secret = "C0qDZyEs-zZkfn8733vMaWdcrVg" 
 )
 
 app = Flask(__name__)
 CORS(app) 
 
-# --- CONEXIÓN A MONGO ATLAS CON PRUEBA DE PING ---
+# --- CONEXIÓN A MONGO ATLAS ---
+# Raúl, recuerda que MONGO_URI es la llave de tu base de datos
 MONGO_URI = 'mongodb+srv://admin_mueblexi:RAUL123@cluster0.lqodd.mongodb.net/mueblexi_db?retryWrites=true&w=majority&appName=Cluster0'
 
 try:
@@ -79,7 +80,7 @@ def register():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 2. GESTIÓN DE PRODUCTOS (POST, GET, PUT, DELETE) ---
+# --- 2. GESTIÓN DE PRODUCTOS ---
 
 @app.route('/api/productos', methods=['POST'])
 def agregar_producto():
@@ -123,7 +124,6 @@ def obtener_catalogo():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# NUEVA: Eliminar Producto
 @app.route('/api/productos/<nombre>', methods=['DELETE'])
 def eliminar_producto(nombre):
     try:
@@ -134,7 +134,6 @@ def eliminar_producto(nombre):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# NUEVA: Editar Producto (Precio y Descripción)
 @app.route('/api/productos/<nombre>', methods=['PUT'])
 def editar_producto(nombre):
     try:
@@ -151,7 +150,7 @@ def editar_producto(nombre):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 3. SISTEMA DE ABONOS Y SALDOS ---
+# --- 3. SISTEMA DE ABONOS ---
 
 @app.route('/api/abonos', methods=['POST'])
 def registrar_abono():
@@ -168,7 +167,6 @@ def registrar_abono():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# NUEVA: Eliminar Abono (Por cliente, producto y fecha para ser precisos)
 @app.route('/api/abonos/eliminar', methods=['POST'])
 def eliminar_abono():
     try:
@@ -184,27 +182,33 @@ def eliminar_abono():
 
 @app.route('/api/mis-compras/<username>', methods=['GET'])
 def obtener_compras_cliente(username):
-    compras = list(db.productos.find({"username_cliente": username}, {"_id": 0}))
-    return jsonify(compras), 200
+    try:
+        compras = list(db.productos.find({"username_cliente": username}, {"_id": 0}))
+        return jsonify(compras), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/historial-pagos/<username>/<producto>', methods=['GET'])
 def obtener_historial(username, producto):
-    historial = list(db.abonos.find({
-        "username_cliente": username,
-        "nombre_producto": producto
-    }, {"_id": 0}))
-    return jsonify(historial), 200
-  # NUEVA: Obtener lista de usuarios que son clientes
+    try:
+        historial = list(db.abonos.find({
+            "username_cliente": username,
+            "nombre_producto": producto
+        }, {"_id": 0}))
+        return jsonify(historial), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/usuarios/clientes', methods=['GET'])
 def obtener_clientes():
     try:
-        # Buscamos en la colección usuarios a todos los que tengan rol 'cliente'
-        # Solo traemos nombre y username, ocultando el password por seguridad
+        # Se corrigió la indentación aquí
         lista_clientes = list(db.usuarios.find({"rol": "cliente"}, {"_id": 0, "password": 0}))
         return jsonify(lista_clientes), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-  @app.route('/api/productos/autorizar-compra', methods=['POST'])
+
+@app.route('/api/productos/autorizar-compra', methods=['POST'])
 def autorizar_compra():
     try:
         datos = request.get_json(force=True)
@@ -213,13 +217,11 @@ def autorizar_compra():
         cliente_user = datos.get('username_cliente')
         nombre_mueble = datos.get('nombre_producto')
 
-        # 1. Verificar que el que autoriza sea realmente un vendedor
         vendedor_db = db.usuarios.find_one({"username": vendedor_user, "rol": "vendedor"})
         
         if not vendedor_db or not check_password_hash(vendedor_db['password'], vendedor_pass):
             return jsonify({"error": "Credenciales de vendedor inválidas"}), 401
 
-        # 2. Asignar el producto al cliente
         resultado = db.productos.update_one(
             {"nombre": nombre_mueble},
             {"$set": {"username_cliente": cliente_user}}
