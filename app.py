@@ -183,7 +183,27 @@ def eliminar_abono():
 @app.route('/api/mis-compras/<username>', methods=['GET'])
 def obtener_compras_cliente(username):
     try:
+        # 1. Buscamos los productos asignados al cliente
         compras = list(db.productos.find({"username_cliente": username}, {"_id": 0}))
+        
+        # 2. Para cada producto, calculamos su saldo real
+        for producto in compras:
+            nombre_mueble = producto.get('nombre')
+            precio_total = producto.get('precio_total', 0)
+            
+            # Buscamos todos los abonos de ESTE mueble para ESTE cliente
+            lista_abonos = list(db.abonos.find({
+                "username_cliente": username,
+                "nombre_producto": nombre_mueble
+            }))
+            
+            # Sumamos todos los montos de los abonos encontrados
+            total_abonado = sum(float(a.get('monto', 0)) for a in lista_abonos)
+            
+            # Creamos un nuevo campo llamado 'saldo_restante'
+            producto['saldo_restante'] = precio_total - total_abonado
+            producto['total_pagado'] = total_abonado # Opcional, por si quieres mostrarlo
+
         return jsonify(compras), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
